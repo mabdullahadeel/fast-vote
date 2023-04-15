@@ -1,16 +1,18 @@
-import asyncio
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-from fastapi.responses import Response
-from fastapi.requests import Request
 from uuid import uuid4 as uuid
+import asyncio
+from fastapi import (
+    FastAPI, WebSocket, WebSocketDisconnect,
+    status, Depends, Request, Response
+)
+from auth import get_session_cookie_value
 from models import (
-        Question,
-        create_db_and_tables,
-        QuestionCreateBody,
-        engine,
-        Option,
-        Vote
-    )
+    Question,
+    create_db_and_tables,
+    QuestionCreateBody,
+    engine,
+    Option,
+    Vote,
+)
 from sqlmodel import Session, select
 from ws import ws_manager
 
@@ -22,11 +24,25 @@ def on_startup():
     create_db_and_tables()
 
 
+@app.middleware("http")
+async def add_session_id(request: Request, call_next):
+    session_id = has_session_id = request.cookies.get("fast-vote-session")
+    if session_id is None:
+        session_id = str(uuid())
+    request.cookies.setdefault("fast-vote-session", session_id)
+    response: Response = await call_next(request)
+    if not has_session_id:
+        response.headers["Set-Cookie"] = f"fast-vote-session={session_id}"
+    return response
+
+
 @app.websocket("/ws/{question_id}")
-async def websocket_endpoint(
-        websocket: WebSocket,
-        question_id: str
-        ):
+async def websocket_endpoint(websocket: WebSocket, question_id: str):
+    with Session(engine) as session:
+        question = session.get(Question, question_id)
+        if question is None:
+            await websocket.close()
+            return
     await ws_manager.connect(question_id, websocket)
     try:
         while True:
@@ -36,100 +52,92 @@ async def websocket_endpoint(
         ws_manager.disconnect(question_id, websocket)
 
 
-@app.get("/")
-async def index():
-    return {"message": "Hello World"}
+@app.get("/assign-session", status_code=status.HTTP_200_OK)
+async def assign_session(
+    _: str = Depends(get_session_cookie_value)
+):
+    return {"status": "ok"}
 
 
-@app.get("/assign-session")
-async def assign_session(request: Request):
-    if "fast-vote-session" in request.cookies:
-        return Response(status_code=200)
-    else:
-        return Response(
-            status_code=201,
-            headers={"Set-Cookie": f"fast-vote-session={uuid()}"}
-        )
-
-
-@app.post("/remove-session/")
-def remove_session(response: Response):
-    response.delete_cookie("fast-vote-session")
-    return Response(status_code=200)
-
-
-@app.post("/create-question/")
-async def create_question(data: QuestionCreateBody):
+@app.post("/create-question/", status_code=status.HTTP_201_CREATED)
+async def create_question(
+    data: QuestionCreateBody,
+    sid: str = Depends(get_session_cookie_value),
+):
     with Session(engine) as session:
-        options = [
-                Option(option_text=text)
-                for text in data.options
-            ]
+        options = [Option(option_text=text) for text in data.options]
         question = Question(
-            question_text=data.question,
-            user_id='123',
-            options=options
+            question_text=data.question, user_id=sid, options=options
         )
         session.add(question)
         session.commit()
+        session.refresh(question)
         session.close()
-        return Response(status_code=201)
+        return question.id
 
 
-@app.get("/get-user-questions/")
-async def get_questions():
+@app.get("/get-user-questions/", status_code=status.HTTP_200_OK)
+async def get_questions(
+    sid: str = Depends(get_session_cookie_value)
+):
     with Session(engine) as session:
-        user_id = '123'
-        statement = select(Question)\
-            .where(Question.user_id == user_id)
+        statement = select(Question).where(Question.user_id == sid)
         result = session.exec(statement)
         questions = result.all()
         res = []
         for question in questions:
-            res.append({
-                **question.dict(),
-                "options": [{
-                    **option.dict(exclude={"votes", "question_id"}),
-                    "votes": len(option.votes)
-                } for option in question.options]
-            })
+            res.append(
+                {
+                    **question.dict(),
+                    "options": [
+                        {
+                            **option.dict(exclude={"votes", "question_id"}),
+                            "votes": len(option.votes),
+                        }
+                        for option in question.options
+                    ],
+                }
+            )
         session.close()
         return res
 
 
-@app.get("/get-question/{question_id}")
-async def get_question(question_id: str):
+@app.get("/get-question/{question_id}", status_code=status.HTTP_200_OK)
+async def get_question(
+    question_id: str,
+):
     with Session(engine) as session:
-        statement = select(Question)\
-            .where(Question.id == question_id)
+        statement = select(Question).where(Question.id == question_id)
         result = session.exec(statement)
         question = result.first()
         if not question:
             return Response(status_code=404)
         res = {
             **question.dict(),
-            "options": [{
-                **option.dict(exclude={"votes", "question_id"}),
-                "votes": len(option.votes)
-            } for option in question.options]
+            "options": [
+                {
+                    **option.dict(exclude={"votes", "question_id"}),
+                    "votes": len(option.votes),
+                }
+                for option in question.options
+            ],
         }
         session.close()
         return res
 
 
-@app.post('/vote/')
-async def vote(option_id: str):
+@app.post("/vote/", status_code=status.HTTP_201_CREATED)
+async def vote(
+    option_id: str, sid: str = Depends(get_session_cookie_value)
+):
     with Session(engine) as session:
         statement = select(Vote)\
-            .where(Option.id == option_id, Vote.user_id == '123')
+            .where(Option.id == option_id, Vote.user_id == sid)
         vote = session.exec(statement).first()
         if vote:
             return Response(status_code=400)
-        vote = Vote(
-            option_id=option_id,
-            user_id='123'
-        )
+        vote = Vote(option_id=option_id, user_id=sid)
         session.add(vote)
         session.commit()
         session.close()
-        return Response(status_code=200)
+        return
