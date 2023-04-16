@@ -1,5 +1,6 @@
 from uuid import uuid4 as uuid
 import asyncio
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi import (
     FastAPI, WebSocket, WebSocketDisconnect,
     status, Depends, Request, Response
@@ -22,6 +23,15 @@ app = FastAPI()
 @app.on_event("startup")
 def on_startup():
     create_db_and_tables()
+
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 @app.middleware("http")
@@ -81,7 +91,8 @@ async def get_questions(
     sid: str = Depends(get_session_cookie_value)
 ):
     with Session(engine) as session:
-        statement = select(Question).where(Question.user_id == sid)
+        statement = select(Question)\
+            .where(Question.user_id == sid)
         result = session.exec(statement)
         questions = result.all()
         res = []
@@ -141,3 +152,20 @@ async def vote(
         session.commit()
         session.close()
         return
+
+
+@app.delete("/question/{question_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delte_question(
+    sid: str = Depends(get_session_cookie_value),
+    question_id: str = None,
+):
+    with Session(engine) as session:
+        statement = select(Question)\
+            .where(Question.id == question_id, Question.user_id == sid)
+    question = session.exec(statement).first()
+    if not question:
+        return Response(status_code=404)
+    session.delete(question)
+    session.commit()
+    session.close()
+    return True
