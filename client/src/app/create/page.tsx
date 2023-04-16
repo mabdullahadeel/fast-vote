@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 
 const MAX_OPTIONS = 5;
 const MIN_OPTIONS = 2;
@@ -24,6 +25,7 @@ async function createQuestion(payload: {
 export default function Page() {
   const [question, setQuestion] = useState("");
   const [options, setOptions] = useState<string[]>(["", ""]);
+  const router = useRouter();
 
   const addOption = () => {
     if (options.length < MAX_OPTIONS) {
@@ -58,7 +60,7 @@ export default function Page() {
     };
     const qid = await createQuestion(payload);
     if (qid) {
-      window.location.href = `/q/${qid}`;
+      router.push(`/q/${qid}`);
     }
   };
 

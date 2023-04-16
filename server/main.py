@@ -116,6 +116,7 @@ async def get_questions(
 @app.get("/get-question/{question_id}", status_code=status.HTTP_200_OK)
 async def get_question(
     question_id: str,
+    sid: str = Depends(get_session_cookie_value)
 ):
     with Session(engine) as session:
         statement = select(Question).where(Question.id == question_id)
@@ -123,6 +124,11 @@ async def get_question(
         question = result.first()
         if not question:
             return Response(status_code=404)
+        vote_statement = select(Vote).where(Vote.user_id == sid)\
+            .select_from(Vote)\
+            .where(Vote.option_id == Option.id)\
+            .where(Option.question_id == question_id)
+        vote = session.exec(vote_statement).first()
         res = {
             **question.dict(),
             "options": [
@@ -132,6 +138,8 @@ async def get_question(
                 }
                 for option in question.options
             ],
+            "has_voted": vote is not None,
+            "vote": vote.option_id if vote else "",
         }
         session.close()
         return res
@@ -143,15 +151,20 @@ async def vote(
 ):
     with Session(engine) as session:
         statement = select(Vote)\
-            .where(Option.id == option_id, Vote.user_id == sid)
+            .where(
+                Vote.user_id == sid,
+                Vote.option_id == option_id,
+                Vote.user_id == sid
+            )
         vote = session.exec(statement).first()
+        print("This is the vote", vote)
         if vote:
             return Response(status_code=400)
         vote = Vote(option_id=option_id, user_id=sid)
         session.add(vote)
         session.commit()
         session.close()
-        return
+        return True
 
 
 @app.delete("/question/{question_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -162,10 +175,10 @@ async def delte_question(
     with Session(engine) as session:
         statement = select(Question)\
             .where(Question.id == question_id, Question.user_id == sid)
-    question = session.exec(statement).first()
-    if not question:
-        return Response(status_code=404)
-    session.delete(question)
-    session.commit()
-    session.close()
-    return True
+        question = session.exec(statement).first()
+        if not question:
+            return Response(status_code=404)
+        session.delete(question)
+        session.commit()
+        session.close()
+        return True

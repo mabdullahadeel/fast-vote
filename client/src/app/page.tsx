@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
-export type Questions = {
+export type Question = {
   pub_date: string;
   question_text: string;
   id: string;
@@ -16,14 +16,14 @@ export type Questions = {
 };
 
 async function fetchUserQuestions() {
-  const response = await fetch("http://localhost:8000/get-user-questions", {
+  const response = await fetch("http://localhost:8000/get-user-questions/", {
     credentials: "include",
     next: {
       revalidate: 0,
     },
   });
   const data = await response.json();
-  return data as Questions[];
+  return data as Question[];
 }
 
 async function deleteQuestion(id: string) {
@@ -38,7 +38,7 @@ async function deleteQuestion(id: string) {
 }
 
 export default function Home() {
-  const [data, setData] = useState<Questions[]>([]);
+  const [data, setData] = useState<Question[]>([]);
 
   function fetchQuestions() {
     fetchUserQuestions()

@@ -27,7 +27,9 @@ class Vote(SQLModel, table=True):
         foreign_key="option.id",
         nullable=False
     )
-    option: "Option" = Relationship(back_populates="votes")
+    option: "Option" = Relationship(
+        back_populates="votes"
+        )
 
 
 class Option(SQLModel, table=True):
@@ -37,10 +39,15 @@ class Option(SQLModel, table=True):
     option_text: str
     question_id: str = Field(
         foreign_key="question.id",
-        default=None
+        default=None,
     )
-    question: "Question" = Relationship(back_populates="options")
-    votes: Optional[Vote] = Relationship(back_populates="option")
+    question: "Question" = Relationship(
+        back_populates="options",
+        )
+    votes: Optional[Vote] = Relationship(
+        back_populates="option",
+        sa_relationship_kwargs={"cascade": "all,delete-orphan,delete"}
+        )
 
 
 class Question(SQLModel, table=True):
@@ -51,7 +58,10 @@ class Question(SQLModel, table=True):
     question_text: str = Field(default=None, min_length=1, max_length=255)
     pub_date: datetime = Field(default_factory=datetime.now)
     user_id: str = Field(default=None, nullable=False)
-    options: List[Option] = Relationship(back_populates="question")
+    options: List[Option] = Relationship(
+        back_populates="question",
+        sa_relationship_kwargs={"cascade": "all,delete-orphan,delete"}
+        )
 
 
 class QuestionCreateBody(SQLModel):
@@ -63,7 +73,7 @@ class QuestionCreateBody(SQLModel):
         min_items=2,
         max_items=5
     )
-    
+
     class Config:
         schema_extra = {
             "example": {
