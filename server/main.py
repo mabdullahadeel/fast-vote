@@ -41,25 +41,28 @@ async def add_session_id(request: Request, call_next):
         session_id = str(uuid())
     request.cookies.setdefault("fast-vote-session", session_id)
     response: Response = await call_next(request)
-    if not has_session_id:
-        response.headers["Set-Cookie"] = f"fast-vote-session={session_id}"
+    if has_session_id is None:
+        response.headers["Set-Cookie"] = \
+            f"fast-vote-session={session_id} ; Path=/ ; HttpOnly"
     return response
 
 
-@app.websocket("/ws/{question_id}")
+@app.websocket("/ws/question/{question_id}")
 async def websocket_endpoint(websocket: WebSocket, question_id: str):
     with Session(engine) as session:
-        question = session.get(Question, question_id)
+        statement = select(Question).where(Question.id == question_id)
+        question = session.exec(statement).first()
         if question is None:
             await websocket.close()
             return
+    await websocket.accept()
     await ws_manager.connect(question_id, websocket)
     try:
         while True:
             await asyncio.sleep(0.5)
             await websocket.receive_json()
     except WebSocketDisconnect:
-        ws_manager.disconnect(question_id, websocket)
+        await ws_manager.disconnect(question_id, websocket)
 
 
 @app.get("/assign-session", status_code=status.HTTP_200_OK)
@@ -147,7 +150,8 @@ async def get_question(
 
 @app.post("/vote/", status_code=status.HTTP_201_CREATED)
 async def vote(
-    option_id: str, sid: str = Depends(get_session_cookie_value)
+    option_id: str,
+    sid: str = Depends(get_session_cookie_value)
 ):
     with Session(engine) as session:
         statement = select(Vote)\
@@ -157,13 +161,25 @@ async def vote(
                 Vote.user_id == sid
             )
         vote = session.exec(statement).first()
-        print("This is the vote", vote)
         if vote:
             return Response(status_code=400)
         vote = Vote(option_id=option_id, user_id=sid)
         session.add(vote)
         session.commit()
+        updated_options_statement = select(Option)\
+            .where(Option.question_id == vote.option.question_id)
+        updated_options = session.exec(updated_options_statement).all()
+        res = [
+            {
+                **option.dict(exclude={"votes", "question_id"}),
+                "votes": len(option.votes),
+            }
+            for option in updated_options
+        ]
         session.close()
+        await ws_manager.send_message(
+            vote.option.question_id, {"type": "voted", "payload": res}
+        )
         return True
 
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { Question } from "@/app/page";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 type QuestionRes = Question & {
   has_voted: boolean;
@@ -24,7 +24,14 @@ async function submitVote(optId: string) {
   return true;
 }
 
+type WSStatus = "idle" | "connected" | "disconnected";
+type WSMessage = {
+  type: "voted";
+  payload: Question["options"];
+};
+
 export default function Page({ params }: { params: { qid: string } }) {
+  const wsRef = useRef<WebSocket | null>(null);
   const [question, setQuestion] = useState<QuestionRes | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>("");
@@ -49,23 +56,48 @@ export default function Page({ params }: { params: { qid: string } }) {
       });
   }, [params]);
 
+  const handleMessage = useCallback((e: MessageEvent) => {
+    const res = JSON.parse(e.data) as WSMessage;
+    if (res.type === "voted") {
+      setQuestion((prev) => {
+        if (!prev) return null;
+        return {
+          ...prev,
+          options: res.payload,
+        };
+      });
+    }
+  }, []);
+
+  const handleSocket = useCallback(() => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current?.close();
+    }
+    const ws = new WebSocket(`ws://localhost:8000/ws/question/${params.qid}`);
+    wsRef.current = ws;
+    ws.onopen = () => {
+      ws.addEventListener("message", handleMessage);
+    };
+    ws.onclose = () => {
+      ws.removeEventListener("message", handleMessage);
+    };
+  }, [params.qid, handleMessage]);
+
+  useEffect(() => {
+    handleSocket();
+    const wsC = wsRef.current;
+    return () => {
+      console.log("closing ws");
+      wsC?.close();
+    };
+  }, [handleSocket]);
+
   const handleSubmit = (e: any) => {
     e.preventDefault();
     submitVote(selectedOption)
       .then((res) => {
         if (res) {
-          fetchQuestion(params.qid)
-            .then((res) => {
-              setQuestion(res);
-              setSelectedOption(res.vote);
-              console.log(res);
-            })
-            .catch((err) => {
-              setError(err);
-            })
-            .finally(() => {
-              setLoading(false);
-            });
+          console.log("success");
         }
       })
       .catch((err) => {
