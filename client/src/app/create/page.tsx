@@ -6,11 +6,8 @@ import { useRouter } from "next/navigation";
 const MAX_OPTIONS = 5;
 const MIN_OPTIONS = 2;
 
-async function createQuestion(payload: {
-  question: string;
-  options: string[];
-}) {
-  const response = await fetch("http://localhost:8000/create-question/", {
+async function createPoll(payload: { poll: string; options: string[] }) {
+  const response = await fetch("http://localhost:8000/create-poll/", {
     credentials: "include",
     method: "POST",
     headers: {
@@ -23,7 +20,7 @@ async function createQuestion(payload: {
 }
 
 export default function Page() {
-  const [question, setQuestion] = useState("");
+  const [poll, setPoll] = useState("");
   const [options, setOptions] = useState<string[]>(["", ""]);
   const router = useRouter();
 
@@ -55,17 +52,17 @@ export default function Page() {
       return;
     }
     const payload = {
-      question,
+      poll,
       options,
     };
-    const qid = await createQuestion(payload);
+    const qid = await createPoll(payload);
     if (qid) {
       router.push(`/q/${qid}`);
     }
   };
 
   const isValid = () => {
-    if (question.length === 0) {
+    if (poll.length === 0) {
       return false;
     }
     for (const option of options) {
@@ -78,20 +75,20 @@ export default function Page() {
 
   return (
     <form className="bg-black p-8 rounded-lg shadow-lg">
-      <h2 className="text-2xl mb-4 text-gray-300">Create a new question</h2>
+      <h2 className="text-2xl mb-4 text-gray-300">Create a new poll</h2>
       <div className="mb-4">
         <label
-          htmlFor="question"
+          htmlFor="poll"
           className="block text-gray-300 font-semibold mb-2"
         >
-          Question
+          Poll
         </label>
         <input
           type="text"
-          id="question"
+          id="poll"
           className="w-full py-2 px-4 bg-gray-900 text-gray-200 rounded-lg border-gray-300 focus:border-indigo-500 focus:outline-none focus:ring"
-          value={question}
-          onChange={(event) => setQuestion(event.target.value)}
+          value={poll}
+          onChange={(event) => setPoll(event.target.value)}
           required
         />
       </div>
@@ -138,7 +135,7 @@ export default function Page() {
         onClick={handleSubmit}
         disabled={!isValid()}
       >
-        Create question
+        Create poll
       </button>
     </form>
   );

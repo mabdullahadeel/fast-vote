@@ -3,9 +3,9 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
-export type Question = {
+export type Poll = {
   pub_date: string;
-  question_text: string;
+  poll_text: string;
   id: string;
   user_id: string;
   options: Array<{
@@ -15,19 +15,19 @@ export type Question = {
   }>;
 };
 
-async function fetchUserQuestions() {
-  const response = await fetch("http://localhost:8000/get-user-questions/", {
+async function fetchUserPolls() {
+  const response = await fetch("http://localhost:8000/get-user-polls/", {
     credentials: "include",
     next: {
       revalidate: 0,
     },
   });
   const data = await response.json();
-  return data as Question[];
+  return data as Poll[];
 }
 
-async function deleteQuestion(id: string) {
-  await fetch(`http://localhost:8000/question/${id}`, {
+async function deletePoll(id: string) {
+  await fetch(`http://localhost:8000/poll/${id}`, {
     credentials: "include",
     next: {
       revalidate: 0,
@@ -38,23 +38,23 @@ async function deleteQuestion(id: string) {
 }
 
 export default function Home() {
-  const [data, setData] = useState<Question[]>([]);
+  const [data, setData] = useState<Poll[]>([]);
 
-  function fetchQuestions() {
-    fetchUserQuestions()
+  function fetchPolls() {
+    fetchUserPolls()
       .then((data) => setData(data))
       .catch((err) => console.log(err));
   }
 
   useEffect(() => {
-    fetchQuestions();
+    fetchPolls();
   }, []);
 
-  function deleteQuestionHandler(id: string) {
-    deleteQuestion(id)
+  function deletePollHandler(id: string) {
+    deletePoll(id)
       .then((data) => {
         if (data) {
-          fetchQuestions();
+          fetchPolls();
         }
       })
       .catch((err) => console.log(err));
@@ -66,27 +66,27 @@ export default function Home() {
       <div className="w-full flex justify-end">
         <Link href="/create">
           <button className="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded">
-            Create Question
+            Create Poll
           </button>
         </Link>
       </div>
       <div className="flex flex-col items-center w-full">
-        <h2 className="text-2xl font-bold">Your Questions</h2>
+        <h2 className="text-2xl font-bold">Your Polls</h2>
         <div className="flex flex-col items-center w-[90%]">
-          {data.map((question) => (
+          {data.map((poll) => (
             <div
               className="flex items-center my-2 justify-between w-full "
-              key={question.id}
+              key={poll.id}
             >
-              <h3 className="text-xl font-bold">{question.question_text}</h3>
+              <h3 className="text-xl font-bold">{poll.poll_text}</h3>
               <div className="flex gap-3">
                 <button
                   className="bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded"
-                  onClick={() => deleteQuestionHandler(question.id)}
+                  onClick={() => deletePollHandler(poll.id)}
                 >
                   Delete
                 </button>
-                <Link href={`/q/${question.id}`}>
+                <Link href={`/q/${poll.id}`}>
                   <button className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
                     Open
                   </button>

@@ -37,11 +37,11 @@ class Option(SQLModel, table=True):
         default_factory=get_defult_uuid, primary_key=True
         )
     option_text: str
-    question_id: str = Field(
-        foreign_key="question.id",
+    poll_id: str = Field(
+        foreign_key="poll.id",
         default=None,
     )
-    question: "Question" = Relationship(
+    poll: "Poll" = Relationship(
         back_populates="options",
         )
     votes: Optional[Vote] = Relationship(
@@ -50,22 +50,22 @@ class Option(SQLModel, table=True):
         )
 
 
-class Question(SQLModel, table=True):
+class Poll(SQLModel, table=True):
     id: Optional[str] = Field(
         default_factory=get_defult_uuid,
         primary_key=True,
     )
-    question_text: str = Field(default=None, min_length=1, max_length=255)
+    poll_text: str = Field(default=None, min_length=1, max_length=255)
     pub_date: datetime = Field(default_factory=datetime.now)
     user_id: str = Field(default=None, nullable=False)
     options: List[Option] = Relationship(
-        back_populates="question",
+        back_populates="poll",
         sa_relationship_kwargs={"cascade": "all,delete-orphan,delete"}
         )
 
 
-class QuestionCreateBody(SQLModel):
-    question: str = Field(default=None, min_length=1, max_length=255)
+class PollCreateBody(SQLModel):
+    poll: str = Field(default=None, min_length=1, max_length=255)
     options: List[str] = Field(
         default=None,
         min_length=1,
@@ -77,7 +77,7 @@ class QuestionCreateBody(SQLModel):
     class Config:
         schema_extra = {
             "example": {
-                "question": "What is your favorite color?",
+                "poll": "What is your favorite color?",
                 "options": ["Red", "Blue", "Green", "Yellow", "Orange"]
             }
         }

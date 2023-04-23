@@ -7,9 +7,9 @@ from fastapi import (
 )
 from auth import get_session_cookie_value
 from models import (
-    Question,
+    Poll,
     create_db_and_tables,
-    QuestionCreateBody,
+    PollCreateBody,
     engine,
     Option,
     Vote,
@@ -47,22 +47,22 @@ async def add_session_id(request: Request, call_next):
     return response
 
 
-@app.websocket("/ws/question/{question_id}")
-async def websocket_endpoint(websocket: WebSocket, question_id: str):
+@app.websocket("/ws/poll/{poll_id}")
+async def websocket_endpoint(websocket: WebSocket, poll_id: str):
     with Session(engine) as session:
-        statement = select(Question).where(Question.id == question_id)
-        question = session.exec(statement).first()
-        if question is None:
+        statement = select(Poll).where(Poll.id == poll_id)
+        poll = session.exec(statement).first()
+        if poll is None:
             await websocket.close()
             return
     await websocket.accept()
-    await ws_manager.connect(question_id, websocket)
+    await ws_manager.connect(poll_id, websocket)
     try:
         while True:
             await asyncio.sleep(0.5)
             await websocket.receive_json()
     except WebSocketDisconnect:
-        await ws_manager.disconnect(question_id, websocket)
+        await ws_manager.disconnect(poll_id, websocket)
 
 
 @app.get("/assign-session", status_code=status.HTTP_200_OK)
@@ -72,43 +72,43 @@ async def assign_session(
     return {"status": "ok"}
 
 
-@app.post("/create-question/", status_code=status.HTTP_201_CREATED)
-async def create_question(
-    data: QuestionCreateBody,
+@app.post("/create-poll/", status_code=status.HTTP_201_CREATED)
+async def create_poll(
+    data: PollCreateBody,
     sid: str = Depends(get_session_cookie_value),
 ):
     with Session(engine) as session:
         options = [Option(option_text=text) for text in data.options]
-        question = Question(
-            question_text=data.question, user_id=sid, options=options
+        poll = Poll(
+            poll_text=data.poll, user_id=sid, options=options
         )
-        session.add(question)
+        session.add(poll)
         session.commit()
-        session.refresh(question)
+        session.refresh(poll)
         session.close()
-        return question.id
+        return poll.id
 
 
-@app.get("/get-user-questions/", status_code=status.HTTP_200_OK)
-async def get_questions(
+@app.get("/get-user-polls/", status_code=status.HTTP_200_OK)
+async def get_polls(
     sid: str = Depends(get_session_cookie_value)
 ):
     with Session(engine) as session:
-        statement = select(Question)\
-            .where(Question.user_id == sid)
+        statement = select(Poll)\
+            .where(Poll.user_id == sid)
         result = session.exec(statement)
-        questions = result.all()
+        polls = result.all()
         res = []
-        for question in questions:
+        for poll in polls:
             res.append(
                 {
-                    **question.dict(),
+                    **poll.dict(),
                     "options": [
                         {
-                            **option.dict(exclude={"votes", "question_id"}),
+                            **option.dict(exclude={"votes", "poll_id"}),
                             "votes": len(option.votes),
                         }
-                        for option in question.options
+                        for option in poll.options
                     ],
                 }
             )
@@ -116,30 +116,30 @@ async def get_questions(
         return res
 
 
-@app.get("/get-question/{question_id}", status_code=status.HTTP_200_OK)
-async def get_question(
-    question_id: str,
+@app.get("/get-poll/{poll_id}", status_code=status.HTTP_200_OK)
+async def get_poll(
+    poll_id: str,
     sid: str = Depends(get_session_cookie_value)
 ):
     with Session(engine) as session:
-        statement = select(Question).where(Question.id == question_id)
+        statement = select(Poll).where(Poll.id == poll_id)
         result = session.exec(statement)
-        question = result.first()
-        if not question:
+        poll = result.first()
+        if not poll:
             return Response(status_code=404)
         vote_statement = select(Vote).where(Vote.user_id == sid)\
             .select_from(Vote)\
             .where(Vote.option_id == Option.id)\
-            .where(Option.question_id == question_id)
+            .where(Option.poll_id == poll_id)
         vote = session.exec(vote_statement).first()
         res = {
-            **question.dict(),
+            **poll.dict(),
             "options": [
                 {
-                    **option.dict(exclude={"votes", "question_id"}),
+                    **option.dict(exclude={"votes", "poll_id"}),
                     "votes": len(option.votes),
                 }
-                for option in question.options
+                for option in poll.options
             ],
             "has_voted": vote is not None,
             "vote": vote.option_id if vote else "",
@@ -167,34 +167,34 @@ async def vote(
         session.add(vote)
         session.commit()
         updated_options_statement = select(Option)\
-            .where(Option.question_id == vote.option.question_id)
+            .where(Option.poll_id == vote.option.poll_id)
         updated_options = session.exec(updated_options_statement).all()
         res = [
             {
-                **option.dict(exclude={"votes", "question_id"}),
+                **option.dict(exclude={"votes", "poll_id"}),
                 "votes": len(option.votes),
             }
             for option in updated_options
         ]
         session.close()
         await ws_manager.send_message(
-            vote.option.question_id, {"type": "voted", "payload": res}
+            vote.option.poll_id, {"type": "voted", "payload": res}
         )
         return True
 
 
-@app.delete("/question/{question_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delte_question(
+@app.delete("/poll/{poll_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delte_poll(
     sid: str = Depends(get_session_cookie_value),
-    question_id: str = None,
+    poll_id: str = None,
 ):
     with Session(engine) as session:
-        statement = select(Question)\
-            .where(Question.id == question_id, Question.user_id == sid)
-        question = session.exec(statement).first()
-        if not question:
+        statement = select(Poll)\
+            .where(Poll.id == poll_id, Poll.user_id == sid)
+        poll = session.exec(statement).first()
+        if not poll:
             return Response(status_code=404)
-        session.delete(question)
+        session.delete(poll)
         session.commit()
         session.close()
         return True
