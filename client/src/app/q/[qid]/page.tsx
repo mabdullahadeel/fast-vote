@@ -37,6 +37,7 @@ export default function Page({ params }: { params: { qid: string } }) {
   const [error, setError] = useState<string>("");
   const [message, setMessage] = useState<string>("");
   const [selectedOption, setSelectedOption] = useState("");
+  const [hasVoted, setHasVoted] = useState(false);
   const totalVotes = poll?.options.reduce(
     (acc, option) => acc + option.votes,
     0
@@ -98,6 +99,7 @@ export default function Page({ params }: { params: { qid: string } }) {
       .then((res) => {
         if (res) {
           console.log("success");
+          setHasVoted(true);
         }
       })
       .catch((err) => {
@@ -132,7 +134,7 @@ export default function Page({ params }: { params: { qid: string } }) {
                     : "bg-gray-700 hover:bg-gray-600"
                 } disabled:cursor-not-allowed`}
                 onClick={() => setSelectedOption(option.id)}
-                disabled={poll?.has_voted}
+                disabled={poll?.has_voted || hasVoted}
               >
                 {option.option_text}
               </button>
@@ -149,7 +151,7 @@ export default function Page({ params }: { params: { qid: string } }) {
         )}
         <button
           className="mt-4 bg-indigo-600 text-white font-medium py-2 px-4 rounded-md shadow-md hover:bg-indigo-700 max-w-lg w-full disabled:opacity-50 disabled:cursor-not-allowed"
-          disabled={!selectedOption || poll?.has_voted}
+          disabled={!selectedOption || poll?.has_voted || hasVoted}
           onClick={handleSubmit}
         >
           Submit
