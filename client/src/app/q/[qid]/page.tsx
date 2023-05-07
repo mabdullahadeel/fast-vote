@@ -24,7 +24,6 @@ async function submitVote(optId: string) {
   return true;
 }
 
-type WSStatus = "idle" | "connected" | "disconnected";
 type WSMessage = {
   type: "voted";
   payload: Poll["options"];
